@@ -140,14 +140,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let p99 = latencies_us[(iterations * 99) / 100];
 
             println!("================================================================");
-            println!("KURUNG DETERMINISTIC SANDBOX BENCHMARK ({} ITERATIONS)", iterations);
+            println!(
+                "KURUNG DETERMINISTIC SANDBOX BENCHMARK ({} ITERATIONS)",
+                iterations
+            );
             println!("================================================================");
-            println!("Cold Start Latency (Compile + Exec) : {} us ({:.3} ms)", cold_us, cold_us as f64 / 1000.0);
-            println!("Warm Cached Latency p50             : {} us ({:.3} ms)", p50, p50 as f64 / 1000.0);
-            println!("Warm Cached Latency p99             : {} us ({:.3} ms)", p99, p99 as f64 / 1000.0);
-            println!("Fuel Consumed per Run               : {} instructions", cold_outcome.receipt.fuel_consumed);
-            println!("Module SHA-256                      : {}", cold_outcome.receipt.module_sha256);
-            println!("SLA Verification (Cold <= 2000 us)  : {}", if cold_us <= 2000 { "PASSED" } else { "FAILED" });
+            println!(
+                "Cold Start Latency (Compile + Exec) : {} us ({:.3} ms)",
+                cold_us,
+                cold_us as f64 / 1000.0
+            );
+            println!(
+                "Warm Cached Latency p50             : {} us ({:.3} ms)",
+                p50,
+                p50 as f64 / 1000.0
+            );
+            println!(
+                "Warm Cached Latency p99             : {} us ({:.3} ms)",
+                p99,
+                p99 as f64 / 1000.0
+            );
+            println!(
+                "Fuel Consumed per Run               : {} instructions",
+                cold_outcome.receipt.fuel_consumed
+            );
+            println!(
+                "Module SHA-256                      : {}",
+                cold_outcome.receipt.module_sha256
+            );
+            println!(
+                "SLA Verification (Cold <= 2000 us)  : {}",
+                if cold_us <= 2000 { "PASSED" } else { "FAILED" }
+            );
             println!("================================================================");
         }
         Commands::AuditSelf => {
@@ -157,7 +181,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut p1 = SandboxPolicy::strict_default();
             p1.max_fuel = 5_000;
             let e1 = KurungEngine::new(p1)?;
-            let inf_wat = r#"(module (func (export "run") (result i64) (loop $l br $l) i64.const 0))"#;
+            let inf_wat =
+                r#"(module (func (export "run") (result i64) (loop $l br $l) i64.const 0))"#;
             assert!(matches!(
                 e1.execute_wat(inf_wat, "run", b""),
                 Err(KurungError::FuelExhausted { .. })
@@ -196,7 +221,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // 4. Path Traversal Guard
             let p4 = SandboxPolicy::strict_default();
-            assert!(p4.sanitize_virtual_path("../../Windows/System32", false).is_err());
+            assert!(p4
+                .sanitize_virtual_path("../../Windows/System32", false)
+                .is_err());
             println!("  [PASS] Stage 4: VFS Default-Deny & Path Traversal Guard");
 
             println!("ALL 4 ADVERSARIAL SECURITY GATES PASSED.");

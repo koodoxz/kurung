@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
-use std::collections::BTreeMap;
 use kurung_policy::{PolicyError, SandboxPolicy};
+use std::collections::BTreeMap;
 use thiserror::Error;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]

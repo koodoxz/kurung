@@ -9,8 +9,8 @@ use kurung_vfs::{BoundedOutputBuffer, VfsError, VirtualFileSystem};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
-use wasmi::{Caller, Config, Engine, Error as WasmiError, Linker, Module, ResourceLimiter, Store};
 use wasmi::core::TrapCode;
+use wasmi::{Caller, Config, Engine, Error as WasmiError, Linker, Module, ResourceLimiter, Store};
 
 #[derive(Debug, Error)]
 pub enum KurungError {
@@ -131,10 +131,7 @@ impl KurungEngine {
     }
 
     pub fn cached_module_count(&self) -> usize {
-        self.module_cache
-            .lock()
-            .map(|c| c.len())
-            .unwrap_or(0)
+        self.module_cache.lock().map(|c| c.len()).unwrap_or(0)
     }
 
     pub fn execute_wat(
@@ -143,8 +140,8 @@ impl KurungEngine {
         entrypoint: &str,
         input: &[u8],
     ) -> Result<ExecutionOutcome, KurungError> {
-        let wasm_bytes = wat::parse_str(wat_source)
-            .map_err(|e| KurungError::Compilation(e.to_string()))?;
+        let wasm_bytes =
+            wat::parse_str(wat_source).map_err(|e| KurungError::Compilation(e.to_string()))?;
         self.execute_wasm(&wasm_bytes, entrypoint, input)
     }
 
@@ -228,7 +225,9 @@ impl KurungEngine {
 
         let func = instance
             .get_typed_func::<(), i64>(&store, entrypoint)
-            .map_err(|e| KurungError::RuntimeTrap(format!("entrypoint '{entrypoint}' error: {e}")))?;
+            .map_err(|e| {
+                KurungError::RuntimeTrap(format!("entrypoint '{entrypoint}' error: {e}"))
+            })?;
 
         let call_result = func.call(&mut store, ());
         let duration_us = start_time.elapsed().as_micros() as u64;
@@ -326,9 +325,11 @@ impl KurungEngine {
 
     fn register_host_functions(linker: &mut Linker<HostContext>) -> Result<(), KurungError> {
         linker
-            .func_wrap("kurung", "input_len", |caller: Caller<'_, HostContext>| -> i32 {
-                caller.data().input.len() as i32
-            })
+            .func_wrap(
+                "kurung",
+                "input_len",
+                |caller: Caller<'_, HostContext>| -> i32 { caller.data().input.len() as i32 },
+            )
             .map_err(|e| KurungError::Compilation(e.to_string()))?;
 
         linker
@@ -339,12 +340,16 @@ impl KurungEngine {
                     if dest_ptr < 0 || max_len < 0 {
                         return -1;
                     }
-                    let Some(mem) = caller.get_export("memory").and_then(|e| e.into_memory()) else {
+                    let Some(mem) = caller.get_export("memory").and_then(|e| e.into_memory())
+                    else {
                         return -1;
                     };
                     let input_bytes = caller.data().input.clone();
                     let to_copy = input_bytes.len().min(max_len as usize);
-                    if mem.write(&mut caller, dest_ptr as usize, &input_bytes[..to_copy]).is_err() {
+                    if mem
+                        .write(&mut caller, dest_ptr as usize, &input_bytes[..to_copy])
+                        .is_err()
+                    {
                         return -1;
                     }
                     to_copy as i32
@@ -360,7 +365,8 @@ impl KurungEngine {
                     if src_ptr < 0 || len < 0 {
                         return -1;
                     }
-                    let Some(mem) = caller.get_export("memory").and_then(|e| e.into_memory()) else {
+                    let Some(mem) = caller.get_export("memory").and_then(|e| e.into_memory())
+                    else {
                         return -1;
                     };
                     let mut buf = vec![0u8; len as usize];
@@ -385,7 +391,8 @@ impl KurungEngine {
                     if path_ptr < 0 || path_len <= 0 || src_ptr < 0 || src_len < 0 {
                         return -1;
                     }
-                    let Some(mem) = caller.get_export("memory").and_then(|e| e.into_memory()) else {
+                    let Some(mem) = caller.get_export("memory").and_then(|e| e.into_memory())
+                    else {
                         return -1;
                     };
                     let mut path_buf = vec![0u8; path_len as usize];
@@ -396,7 +403,10 @@ impl KurungEngine {
                         return -1;
                     };
                     let mut content_buf = vec![0u8; src_len as usize];
-                    if mem.read(&caller, src_ptr as usize, &mut content_buf).is_err() {
+                    if mem
+                        .read(&caller, src_ptr as usize, &mut content_buf)
+                        .is_err()
+                    {
                         return -1;
                     }
                     match caller.data_mut().vfs.write_file(path_str, &content_buf) {
@@ -420,7 +430,8 @@ impl KurungEngine {
                     if path_ptr < 0 || path_len <= 0 || dest_ptr < 0 || dest_cap < 0 {
                         return -1;
                     }
-                    let Some(mem) = caller.get_export("memory").and_then(|e| e.into_memory()) else {
+                    let Some(mem) = caller.get_export("memory").and_then(|e| e.into_memory())
+                    else {
                         return -1;
                     };
                     let mut path_buf = vec![0u8; path_len as usize];
@@ -435,7 +446,10 @@ impl KurungEngine {
                         Err(_) => return -2,
                     };
                     let to_copy = content.len().min(dest_cap as usize);
-                    if mem.write(&mut caller, dest_ptr as usize, &content[..to_copy]).is_err() {
+                    if mem
+                        .write(&mut caller, dest_ptr as usize, &content[..to_copy])
+                        .is_err()
+                    {
                         return -1;
                     }
                     to_copy as i32

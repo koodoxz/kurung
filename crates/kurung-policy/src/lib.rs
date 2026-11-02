@@ -19,7 +19,10 @@ pub enum PolicyError {
     #[error("vfs access denied by default-deny policy for path: '{0}'")]
     VfsAccessDenied(String),
     #[error("write quota exceeded: requested {requested} bytes, max allowed {max_allowed} bytes")]
-    WriteQuotaExceeded { requested: usize, max_allowed: usize },
+    WriteQuotaExceeded {
+        requested: usize,
+        max_allowed: usize,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -56,7 +59,9 @@ impl SandboxPolicy {
         if self.max_fuel == 0 {
             return Err(PolicyError::InvalidFuelLimit(0));
         }
-        if self.max_memory_bytes < WASM_PAGE_SIZE || self.max_memory_bytes > MAX_ALLOWED_MEMORY_BYTES {
+        if self.max_memory_bytes < WASM_PAGE_SIZE
+            || self.max_memory_bytes > MAX_ALLOWED_MEMORY_BYTES
+        {
             return Err(PolicyError::InvalidMemoryLimit(self.max_memory_bytes));
         }
         if self.max_output_bytes == 0 || self.max_output_bytes > 64 * 1024 * 1024 {
@@ -65,7 +70,11 @@ impl SandboxPolicy {
         Ok(())
     }
 
-    pub fn sanitize_virtual_path(&self, raw_path: &str, is_write: bool) -> Result<String, PolicyError> {
+    pub fn sanitize_virtual_path(
+        &self,
+        raw_path: &str,
+        is_write: bool,
+    ) -> Result<String, PolicyError> {
         if raw_path.is_empty()
             || raw_path.contains('\0')
             || raw_path.contains('\\')
@@ -171,7 +180,8 @@ mod tests {
             Err(PolicyError::VfsAccessDenied(_))
         ));
         assert_eq!(
-            p.sanitize_virtual_path("/workspace/data.json", false).unwrap(),
+            p.sanitize_virtual_path("/workspace/data.json", false)
+                .unwrap(),
             "/workspace/data.json"
         );
     }

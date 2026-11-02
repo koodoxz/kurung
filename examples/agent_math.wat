@@ -23,3 +23,4 @@
         (i64.add (local.get $acc) (i64.extend_i32_s (call $input_len)))
     )
 )
+

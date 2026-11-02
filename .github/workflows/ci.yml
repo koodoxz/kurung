@@ -41,3 +41,4 @@ jobs:
 
       - name: Run Sub-Millisecond SLA Benchmark (Release)
         run: cargo run --release -p kurung-cli -- bench --iterations 1000
+
