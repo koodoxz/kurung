@@ -1,0 +1,43 @@
+name: Kurung CI — Deterministic Sandbox Verification
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  verify:
+    name: Test, Clippy & Adversarial Self-Audit
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install stable Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run Clippy linter (zero warnings gate)
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Run unit and adversarial integration tests
+        run: cargo test --workspace --all-targets
+
+      - name: Run 4-Stage Red-Team Adversarial Self-Audit (Release)
+        run: cargo run --release -p kurung-cli -- audit-self
+
+      - name: Run Sub-Millisecond SLA Benchmark (Release)
+        run: cargo run --release -p kurung-cli -- bench --iterations 1000

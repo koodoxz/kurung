@@ -241,6 +241,7 @@ dependencies = [
  "kurung-vfs",
  "serde",
  "serde_json",
+ "wat",
 ]
 
 [[package]]
