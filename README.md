@@ -142,20 +142,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### 2. Integration with Model Context Protocol (MCP) & Agent Swarms
 
-`kurung` can be registered as a local MCP tool server for LLMs (Claude Desktop, Antigravity IDE, Cursor, OpenClaw):
+`kurung` includes a native, zero-dependency MCP stdio server. It can be registered directly in Claude Desktop, Antigravity IDE, Cursor, or OpenClaw:
 
 ```json
 {
   "mcpServers": {
     "kurung": {
       "command": "kurung",
-      "args": ["run", "--json"]
+      "args": ["mcp"]
     }
   }
 }
 ```
 
-When an LLM synthesizes a mathematical model or strategy filter, it invokes `kurung` to test the code deterministically. If the LLM generates a broken infinite loop (`while (true) {}`), `kurung` safely aborts execution and returns:
+When an LLM synthesizes a mathematical model or strategy filter, it invokes `kurung_run_wasm` to test the code deterministically. If the LLM generates a broken infinite loop (`while (true) {}`), `kurung` safely aborts execution and returns:
 
 ```json
 {

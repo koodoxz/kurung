@@ -67,3 +67,4 @@ with open(preview_path, "w", encoding="utf-8") as f:
     f.write(html)
 
 print("Preview HTML generated successfully at:", preview_path)
+
