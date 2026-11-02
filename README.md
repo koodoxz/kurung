@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/kurung_banner.png" alt="Kurung Secure WASM Sandbox" width="100%">
+  <img src="docs/assets/kurung_banner.png" alt="Kurung Secure WASM Sandbox" width="360">
 </p>
 
 # kurung
@@ -7,7 +7,7 @@
 [![CI](https://github.com/koodoxz/kurung/actions/workflows/ci.yml/badge.svg)](https://github.com/koodoxz/kurung/actions/workflows/ci.yml)
 [![Rust](https://img.shields.io/badge/Rust-1.80%2B-blue.svg?logo=rust)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
-[![Safety](https://img.shields.io/badge/Safety-%23!%5Bforbid(unsafe__code)%5D-brightgreen.svg)](#security-guarantees)
+[![Safety](https://img.shields.io/badge/Safety-%23!%5Bforbid(unsafe__code)%5D-brightgreen.svg)](#security-guarantees--threat-boundaries)
 [![Cold Start](https://img.shields.io/badge/Cold%20Start-787%20%C2%B5s-success.svg)](#verified-benchmarks)
 [![Warm p50](https://img.shields.io/badge/Warm%20p50-35%20%C2%B5s-success.svg)](#verified-benchmarks)
 [![Ecosystem](https://img.shields.io/badge/Ecosystem-MECOB-00bcd4.svg)](https://github.com/koodoxz)
@@ -38,110 +38,39 @@ Traditional isolation solutions introduce severe trade-offs:
 
 ## AI Agent Architecture & Execution Boundary
 
-Where does `kurung` sit in an autonomous AI agent or MCP host system?
-
-It is critical to distinguish between **Semantic Policy Authorization** (business intent and human-in-the-loop approvals) and **Runtime Sandboxing** (guest code execution containment). `kurung` operates strictly at the **Execution Isolation Layer**:
+`kurung` operates strictly at the **Execution Isolation Layer**, separating runtime confinement from semantic agent policies:
 
 ```mermaid
-graph TD
-    Agent["Host Agent Runtime<br/>(Claude Code / OpenCode / Antigravity / Custom)"] --> Dispatcher["Tool Dispatch Router"]
-    Dispatcher --> Policy["Semantic Policy Gate<br/>(Human Approval, Intent Whitelist, Risk Bounds)"]
-    Policy --> Router{"Execution Target"}
-    
-    Router -->|"Dynamic Untrusted Code / WASM"| Kurung["kurung::KurungEngine<br/>(In-Process Deterministic Isolation)"]
-    Router -->|"External System Call / Native I/O"| MCP["External MCP Tool Connector<br/>(Broker REST, Database, Host Shell)"]
-    
-    subgraph SandboxBoundary ["Kurung Confinement Domain (Runtime Sandbox)"]
-        Kurung --> Fuel["Instruction-Level Fuel Meter<br/>(Deterministic CPU Budget)"]
-        Kurung --> Mem["Linear Memory Limiter<br/>(Page-Aligned Growth Ceiling)"]
-        Kurung --> VFS["Ephemeral RAM VFS<br/>(Default-Deny File Isolation)"]
-    end
-    
-    SandboxBoundary --> Receipt["ExecutionReceipt<br/>(SHA-256 Digest Triplet + Resource Attestation)"]
-    Receipt --> Sink["Attestation Sink / Validation Engine"]
-    MCP --> Sink
-    Sink --> Continuation["Agent Context Update & Continuation"]
+graph LR
+    Agent["Host Agent Runtime<br/>(Claude / Antigravity / OpenCode)"] --> Router["Tool Dispatch & Policy Gate"]
+    Router -->|"Dynamic Untrusted WASM"| Kurung["Kurung Confinement Sandbox<br/>(Fuel + Linear Memory + RAM VFS)"]
+    Router -->|"External Native API"| MCP["External MCP Connectors<br/>(Broker, DB, Network)"]
+    Kurung --> Receipt["Execution Receipt<br/>(SHA-256 Attestation)"]
+    Receipt --> Continuation["Agent Context & Next Step"]
+    MCP --> Continuation
 ```
 
 ---
 
-## Architectural Simulation & Execution Flow
+## Architectural Simulation
 
 ![Kurung Security Simulation](docs/assets/kurung_simulation.gif)
 
-### Low-Level Execution Sequence & Trap Resolution
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Agent as Host Agent / MCP Host
-    participant Kurung as kurung::KurungEngine
-    participant Limiter as ResourceLimiter & Fuel
-    participant VFS as In-Memory VFS
-    participant Output as Cryptographic Receipt
-
-    Agent->>Kurung: execute_wasm(wasm_bytes, entry, input_payload)
-    Kurung->>Kurung: Lookup module SHA-256 in memory cache
-    alt Cache Miss (Cold Start)
-        Kurung->>Kurung: Compile & validate module (787 µs)
-    else Cache Hit (Warm Run)
-        Kurung->>Kurung: Reuse compiled instance (35 µs)
-    end
-    Kurung->>Limiter: Meter CPU instructions (1 fuel = 1 inst)
-    Kurung->>Limiter: Enforce linear memory cap (e.g. max 16 MiB)
-    alt Module attempts infinite loop
-        Limiter-->>Kurung: OutOfFuel Trap (Terminated deterministically)
-    else Module attempts memory bomb
-        Limiter-->>Kurung: MemoryLimitExceeded (Rejected before OS alloc)
-    end
-    Kurung->>VFS: Host calls (vfs_read, vfs_write) bounded to RAM
-    Note over VFS: Path traversal (.., C:\) rejected at policy layer
-    Kurung->>Output: Produce ExecutionReceipt (SHA-256 triplet + Fuel count)
-    Output-->>Agent: Return value, stdout, and tamper-evident receipt
-```
-```
-
 ---
 
-## Security Guarantees
+## Security Guarantees & Threat Boundaries
 
-1. **Deterministic CPU Fuel Metering**: Every WebAssembly instruction deducts exactly 1 unit of fuel from the store. When the fuel budget is exhausted, execution aborts immediately at the exact instruction boundary.
-2. **Page-Aligned Memory Ceiling**: Enforces an unbypassable linear memory ceiling. Calls to `memory.grow` beyond the quota fail safely without crashing the host process.
-3. **Zero-Host-Leak In-Memory VFS**: File operations use an ephemeral, RAM-only `VirtualFileSystem` under a default-deny policy. Path traversal sequences (`..`, `\`, null bytes, drive prefixes) are rejected before execution.
-4. **Bounded Output Buffering**: Guest standard output is limited to a configurable byte threshold to eliminate log-flooding memory attacks.
-5. **Content-Addressable Module Cache**: Thread-safe in-memory caching keyed by module SHA-256 digest, cutting invocation latency to 35 microseconds ($p_{50}$).
-6. **Cryptographic Execution Receipts**: Every execution outputs a structured receipt containing SHA-256 hashes of the module, input payload, and output buffer, alongside exact fuel consumption and duration.
-7. **Zero Unsafe Code Workspace**: Strictly enforces `#![forbid(unsafe_code)]` across all workspace crates.
-
----
-
-## Threat Model & Explicit Boundaries
-
-High-rigor security requires clarity on what a sandbox defends against and what must be handled by outer orchestration layers:
-
-| Threat Category | Kurung Defense Layer | Status | Responsibility / Notes |
+| Threat Vector | Kurung Defense Mechanism | Status | Scope Boundary |
 |:---|:---|:---:|:---|
-| **CPU Starvation (Infinite Loop)** | Instruction Fuel Metering via `wasmi` | **Enforced** | Terminates guest within sub-millisecond once instruction quota expires. |
-| **Guest RAM Bomb (`memory.grow`)** | `ResourceLimiter` Linear Memory Ceiling | **Enforced** | Rejects memory growth exceeding policy (e.g. 16 MiB) without host panic. |
-| **Host Disk Traversal (`..`, `C:\`, `/etc`)** | Default-Deny Virtual Memory FileSystem | **Enforced** | Guest has zero access to host OS storage; all I/O is bounded in RAM. |
-| **Host Drive Letters & Null Byte Escape** | `sanitize_virtual_path` rejection | **Enforced** | Rejects `\0`, `\`, and `:` before any VFS lookup occurs. |
-| **Execution Tampering** | SHA-256 Module & Payload Receipt | **Enforced** | Generates tamper-evident cryptographic receipts for audit ledgers. |
-| **Agent Semantic Abuse (e.g. `transfer_funds`)** | Out of Scope for Runtime Sandbox | **External** | Must be enforced by outer **Semantic Policy Authorization** & Human-in-the-Loop gates. |
-| **Module Cache Flooding DoS** | Content-addressable cache without eviction | **v0.2 Roadmap** | Mitigated by Bounded LRU Cache (max 128 modules / 64 MiB ceiling). |
-| **Wall-Clock Blocking Host Calls** | Instruction-level fuel counter | **v0.2 Roadmap** | Mitigated by asynchronous wall-clock deadline interrupt (epoch interruption). |
-
----
-
-## Hardening Roadmap (v0.2)
-
-In response to rigorous security architecture reviews, the following enhancements are scheduled for the v0.2 release:
-
-- [ ] **Bounded LRU Module Cache**: Replace unbounded `BTreeMap` with an LRU cache capped at 128 modules or 64 MiB to eliminate memory exhaustion from unique module spam.
-- [ ] **Wall-Clock Deadline Interrupt**: Supplement instruction fuel with a wall-clock hard deadline timer (e.g., 2,000 ms hard ceiling) to prevent blocking host-side edge cases.
-- [ ] **Total Host Memory Footprint Accounting**: Bound pre-instantiation allocations (raw payload bytes, parsed WAT AST, and total VFS storage) under a unified host memory ceiling.
-- [ ] **Adversarial Fuzzing Testbed**: Automated property-based fuzzing and malformed WASM corpus validation across CI runners.
-
----
+| **CPU Lockup (Infinite Loop)** | Instruction-level fuel metering via `wasmi` | **Enforced** | Deterministic cutoff at instruction boundary |
+| **Guest RAM Bomb (`memory.grow`)** | Page-aligned linear memory ceiling (e.g. 16 MiB) | **Enforced** | Rejection without crashing host OS |
+| **Filesystem Escape (`..`, `C:\`, `/etc`)** | Ephemeral in-memory RAM VFS | **Enforced** | Host disk is isolated; zero disk leaks |
+| **Path Traversal & Null Byte Injection** | Strict path sanitization (`\0`, `\`, `:`) | **Enforced** | Hard reject on invalid virtual path syntax |
+| **Log Flooding / Memory Hijack** | Bounded stdout buffer threshold | **Enforced** | Output truncated at configured byte limit |
+| **Execution Tampering** | SHA-256 digest triplet receipt | **Enforced** | Verifiable attestation for audit ledgers |
+| **Agent Semantic Abuse (e.g. fund transfer)** | Out of scope for runtime sandbox | **External** | Managed by outer agent policy & human approval |
+| **Module Cache Flooding DoS** | Content-addressable SHA-256 module cache | **v0.2 Roadmap** | Adding bounded LRU cache (128 modules / 64 MiB) |
+| **Blocking Host Call Hang** | Instruction-level fuel budgeting | **v0.2 Roadmap** | Adding wall-clock hard deadline timer |
 
 ---
 
@@ -185,7 +114,7 @@ use kurung_policy::SandboxPolicy;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 1. Configure deterministic bounds
     let mut policy = SandboxPolicy::strict_default();
-    policy.max_fuel = 100_000;              // Max 100,000 instructions
+    policy.max_fuel = 100_000;                 // Max 100,000 instructions
     policy.max_memory_bytes = 4 * 1024 * 1024; // 4 MiB RAM ceiling
 
     let engine = KurungEngine::new(policy)?;
