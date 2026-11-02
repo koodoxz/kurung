@@ -1,0 +1,13 @@
+[package]
+name = "kurung-vfs"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Capability-guarded in-memory virtual filesystem and bounded ring buffers for Kurung"
+
+[dependencies]
+kurung-policy.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+
