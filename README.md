@@ -151,7 +151,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 {
   "mcpServers": {
     "kurung": {
-      "command": "C:/Pato/Nusantara-Rust-Suite/kurung/target/release/kurung.exe",
+      "command": "kurung",
       "args": ["run", "--json"]
     }
   }
