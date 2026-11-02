@@ -1,0 +1,5 @@
+# GitHub Linguist Overrides
+# Documentation, video generators, and helper tools are excluded from core repository language stats
+scripts/** linguist-documentation
+examples/** linguist-documentation
+docs/** linguist-documentation
