@@ -28,7 +28,36 @@ Traditional isolation solutions introduce severe trade-offs:
 **`kurung` eliminates this trade-off.** It runs compiled WebAssembly (`.wasm` or `.wat`) inside a capability-isolated in-process sandbox with:
 - **787 microseconds (0.78 ms)** cold-start compilation and execution.
 - **35 microseconds** warm cached execution.
-- **100% pure Rust** with `#![forbid(unsafe_code)]`.
+- **100% pure Rust** with `#![forbid(unsafe_code)]` using the battle-tested `wasmi` deterministic interpreter.
+
+---
+
+## AI Agent Architecture & Execution Boundary
+
+Where does `kurung` sit in an autonomous AI agent or MCP host system?
+
+It is critical to distinguish between **Semantic Policy Authorization** (business intent and human-in-the-loop approvals) and **Runtime Sandboxing** (guest code execution containment). `kurung` operates strictly at the **Execution Isolation Layer**:
+
+```mermaid
+graph TD
+    Agent["🤖 AI AGENT<br/>(Claude Code / OpenCode / Antigravity)"] --> Dispatcher["🔀 Tool Dispatcher"]
+    Dispatcher --> Policy["🛡️ Semantic Policy Authorization<br/>(Business Intent, Human Approval, Risk Limits)"]
+    Policy --> Branch{"Tool Classification"}
+    
+    Branch -->|"Dynamic Compute / Untrusted WASM"| Kurung["📦 Kurung Execution Engine<br/>(Deterministic Confinement)"]
+    Branch -->|"External System Action / Network API"| MCP["🌐 MCP Tool Connector<br/>(Broker API / SQLite / OAuth)"]
+    
+    subgraph KurungBoundary ["Kurung Isolation Boundary (Runtime Sandbox)"]
+        Kurung --> Fuel["⚡ Instruction Fuel Metering<br/>(Anti-Looping)"]
+        Kurung --> Mem["💾 Linear Memory Ceiling<br/>(Anti-RAM Bomb)"]
+        Kurung --> VFS["📁 In-Memory RAM VFS<br/>(Zero Host Disk Leak)"]
+    end
+    
+    KurungBoundary --> Receipt["📜 Cryptographic Execution Receipt<br/>(SHA-256 Triplet + Attestation Sink)"]
+    Receipt --> Validation["🔍 Result Validation"]
+    MCP --> Validation
+    Validation --> Continuation["🔄 Agent Continuation<br/>(Next Reasoning Step)"]
+```
 
 ---
 
@@ -75,7 +104,37 @@ sequenceDiagram
 4. **Bounded Output Buffering**: Guest standard output is limited to a configurable byte threshold to eliminate log-flooding memory attacks.
 5. **Content-Addressable Module Cache**: Thread-safe in-memory caching keyed by module SHA-256 digest, cutting invocation latency to 35 microseconds ($p_{50}$).
 6. **Cryptographic Execution Receipts**: Every execution outputs a structured receipt containing SHA-256 hashes of the module, input payload, and output buffer, alongside exact fuel consumption and duration.
-7. **Zero Unsafe Code**: Strictly enforces `#![forbid(unsafe_code)]` across all workspace crates.
+7. **Zero Unsafe Code Workspace**: Strictly enforces `#![forbid(unsafe_code)]` across all workspace crates.
+
+---
+
+## Threat Model & Explicit Boundaries
+
+High-rigor security requires clarity on what a sandbox defends against and what must be handled by outer orchestration layers:
+
+| Threat Category | Kurung Defense Layer | Status | Responsibility / Notes |
+|:---|:---|:---:|:---|
+| **CPU Starvation (Infinite Loop)** | Instruction Fuel Metering via `wasmi` | **Enforced** | Terminates guest within sub-millisecond once instruction quota expires. |
+| **Guest RAM Bomb (`memory.grow`)** | `ResourceLimiter` Linear Memory Ceiling | **Enforced** | Rejects memory growth exceeding policy (e.g. 16 MiB) without host panic. |
+| **Host Disk Traversal (`..`, `C:\`, `/etc`)** | Default-Deny Virtual Memory FileSystem | **Enforced** | Guest has zero access to host OS storage; all I/O is bounded in RAM. |
+| **Host Drive Letters & Null Byte Escape** | `sanitize_virtual_path` rejection | **Enforced** | Rejects `\0`, `\`, and `:` before any VFS lookup occurs. |
+| **Execution Tampering** | SHA-256 Module & Payload Receipt | **Enforced** | Generates tamper-evident cryptographic receipts for audit ledgers. |
+| **Agent Semantic Abuse (e.g. `transfer_funds`)** | Out of Scope for Runtime Sandbox | **External** | Must be enforced by outer **Semantic Policy Authorization** & Human-in-the-Loop gates. |
+| **Module Cache Flooding DoS** | Content-addressable cache without eviction | **v0.2 Roadmap** | Mitigated by Bounded LRU Cache (max 128 modules / 64 MiB ceiling). |
+| **Wall-Clock Blocking Host Calls** | Instruction-level fuel counter | **v0.2 Roadmap** | Mitigated by asynchronous wall-clock deadline interrupt (epoch interruption). |
+
+---
+
+## Hardening Roadmap (v0.2)
+
+In response to rigorous security architecture reviews, the following enhancements are scheduled for the v0.2 release:
+
+- [ ] **Bounded LRU Module Cache**: Replace unbounded `BTreeMap` with an LRU cache capped at 128 modules or 64 MiB to eliminate memory exhaustion from unique module spam.
+- [ ] **Wall-Clock Deadline Interrupt**: Supplement instruction fuel with a wall-clock hard deadline timer (e.g., 2,000 ms hard ceiling) to prevent blocking host-side edge cases.
+- [ ] **Total Host Memory Footprint Accounting**: Bound pre-instantiation allocations (raw payload bytes, parsed WAT AST, and total VFS storage) under a unified host memory ceiling.
+- [ ] **Adversarial Fuzzing Testbed**: Automated property-based fuzzing and malformed WASM corpus validation across CI runners.
+
+---
 
 ---
 
