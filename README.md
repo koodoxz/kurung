@@ -34,6 +34,8 @@ Traditional isolation solutions introduce severe trade-offs:
 
 ## Architectural Simulation & Execution Flow
 
+![Kurung Security Simulation](docs/assets/kurung_simulation.gif)
+
 ```mermaid
 sequenceDiagram
     autonumber
