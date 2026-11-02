@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kurung Sandbox — Interactive Confinement Simulator</title>
+  <style>
+    :root {
+      --bg: #090d16;
+      --panel: #111726;
+      --border: #1e293b;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --danger: #f43f5e;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      padding: 24px;
+      line-height: 1.5;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 24px;
+    }
+    h1 { font-size: 24px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+    .badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: #0284c7;
+      color: white;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+    
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+    }
+    .card-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .btn-group { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+    button {
+      background: #1e293b;
+      color: var(--text);
+      border: 1px solid #334155;
+      padding: 10px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    button:hover { background: #334155; border-color: var(--accent); }
+    button.active {
+      background: #0284c7;
+      border-color: #38bdf8;
+      color: white;
+    }
+    button.run-btn {
+      background: #059669;
+      border-color: #10b981;
+      width: 100%;
+      padding: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      margin-top: 10px;
+    }
+    button.run-btn:hover { background: #10b981; }
+
+    .code-box {
+      background: #06090e;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 14px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: #cbd5e1;
+      height: 180px;
+      overflow-y: auto;
+      white-space: pre;
+    }
+
+    /* Meters */
+    .meter-box { margin-bottom: 16px; }
+    .meter-label { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px; }
+    .meter-bar {
+      height: 10px;
+      background: #1e293b;
+      border-radius: 5px;
+      overflow: hidden;
+      position: relative;
+    }
+    .meter-fill {
+      height: 100%;
+      width: 0%;
+      transition: width 0.3s ease, background 0.3s ease;
+    }
+    .fill-fuel { background: var(--accent); }
+    .fill-mem { background: var(--warning); }
+    .fill-danger { background: var(--danger) !important; }
+
+    /* Comparison Table */
+    table.compare {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin-top: 10px;
+    }
+    table.compare th, table.compare td {
+      padding: 10px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    table.compare th { color: var(--muted); font-weight: 500; }
+    .status-pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .pill-fail { background: rgba(244, 63, 94, 0.2); color: #f43f5e; border: 1px solid #f43f5e; }
+    .pill-pass { background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid #10b981; }
+
+    .receipt-box {
+      background: #06090e;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 12px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: #94a3b8;
+      height: 210px;
+      overflow-y: auto;
+    }
+    .receipt-box .key { color: var(--accent); }
+    .receipt-box .val { color: #f8fafc; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>kurung <span class="badge">MECOB Ecosystem</span></h1>
+        <p style="color: var(--muted); font-size: 13px; margin-top: 4px;">
+          Deterministic WASI/WASM AI Agent Confinement & Resource Protection Simulator
+        </p>
+      </div>
+      <div>
+        <span style="font-size: 12px; color: var(--muted);">Engine: pure-Rust / #![forbid(unsafe_code)]</span>
+      </div>
+    </header>
+
+    <div class="grid">
+      <!-- Left: Scenario Selector & Code -->
+      <div class="card">
+        <div class="card-title">
+          <span>1. Select Untrusted AI Code Scenario</span>
+          <span id="activeScenarioLabel" style="color: var(--accent);">Scenario A</span>
+        </div>
+        <div class="btn-group">
+          <button id="btnA" class="active" onclick="selectScenario('A')">A: Infinite Loop (CPU)</button>
+          <button id="btnB" onclick="selectScenario('B')">B: Memory Bomb (RAM)</button>
+          <button id="btnC" onclick="selectScenario('C')">C: Path Traversal (VFS)</button>
+          <button id="btnD" onclick="selectScenario('D')">D: Valid Agent Tool</button>
+        </div>
+
+        <div class="card-title">
+          <span>Synthesized WebAssembly (WAT) Source</span>
+        </div>
+        <div id="codeDisplay" class="code-box"></div>
+
+        <button class="run-btn" onclick="executeSimulation()">Run Confinement Simulation</button>
+      </div>
+
+      <!-- Right: Real-time Meters & Comparison -->
+      <div class="card">
+        <div class="card-title">
+          <span>2. Live Confinement Telemetry</span>
+          <span id="runtimeLatency" style="color: var(--success); font-family: var(--font-mono);">Ready</span>
+        </div>
+
+        <div class="meter-box">
+          <div class="meter-label">
+            <span>CPU Instruction Fuel (Deterministic Cap)</span>
+            <span id="fuelText" style="font-family: var(--font-mono);">0 / 500,000</span>
+          </div>
+          <div class="meter-bar">
+            <div id="fuelBar" class="meter-fill fill-fuel"></div>
+          </div>
+        </div>
+
+        <div class="meter-box">
+          <div class="meter-label">
+            <span>Linear Memory Ceiling (Host Ceiling: 16 MiB)</span>
+            <span id="memText" style="font-family: var(--font-mono);">0 KiB / 16,384 KiB</span>
+          </div>
+          <div class="meter-bar">
+            <div id="memBar" class="meter-fill fill-mem"></div>
+          </div>
+        </div>
+
+        <div class="card-title" style="margin-top: 20px;">
+          <span>Host Protection Impact Comparison</span>
+        </div>
+        <table class="compare">
+          <thead>
+            <tr>
+              <th>Vector</th>
+              <th>Unprotected OS Host</th>
+              <th>Inside kurung</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td id="impactVector">Infinite Loop</td>
+              <td><span id="unprotectedResult" class="status-pill pill-fail">100% CPU Freeze</span></td>
+              <td><span id="kurungResult" class="status-pill pill-pass">Fuel Cutoff (787 µs)</span></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="card-title" style="margin-top: 20px;">
+          <span>3. Cryptographic Execution Receipt (SHA-256)</span>
+        </div>
+        <div id="receiptDisplay" class="receipt-box">
+// Execution receipt will appear here upon simulation run...
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const scenarios = {
+      A: {
+        name: "A: Infinite Loop (CPU)",
+        wat: `(module\n  (func (export "run") (result i64)\n    (loop $inf\n      br $inf\n    )\n    i64.const 0\n  )\n)`,
+        fuel: 500000,
+        fuelUsed: 500000,
+        fuelPct: 100,
+        memUsed: "64 KiB",
+        memPct: 0.4,
+        latency: "412 µs (0.41 ms)",
+        unprotected: "100% Core Lockup",
+        kurungStatus: "FUEL_EXHAUSTED",
+        kurungPill: "Cutoff in 412 µs",
+        receipt: {
+          module_sha256: "96a6f476d8f2bdec372331c868c413dff492e9d2ee658bedfdbdf7d68bdbec3c",
+          input_sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          fuel_limit: 500000,
+          fuel_consumed: 500000,
+          peak_memory_bytes: 65536,
+          status: "FUEL_EXHAUSTED"
+        }
+      },
+      B: {
+        name: "B: Memory Bomb (RAM)",
+        wat: `(module\n  (memory (export "memory") 1)\n  (func (export "run") (result i64)\n    ;; Attempts to dynamically grow memory by 10,000 pages (655 MB)\n    (i32.const 10000)\n    (memory.grow)\n    (i64.extend_i32_s)\n  )\n)`,
+        fuel: 500000,
+        fuelUsed: 12,
+        fuelPct: 0.1,
+        memUsed: "64 KiB (Blocked 655 MB)",
+        memPct: 0.4,
+        latency: "185 µs (0.18 ms)",
+        unprotected: "Host OOM Crash",
+        kurungStatus: "MEMORY_REJECTED",
+        kurungPill: "Alloc Denied (-1)",
+        receipt: {
+          module_sha256: "e7c2a129efb7a02c9d87ba25619ce16a704a29a174092b71fa08d249f3e58981",
+          fuel_limit: 500000,
+          fuel_consumed: 12,
+          peak_memory_bytes: 65536,
+          allocation_denied: true,
+          status: "OK (Handled)"
+        }
+      },
+      C: {
+        name: "C: Path Traversal (VFS)",
+        wat: `(module\n  (import "kurung" "vfs_read" (func $r (param i32 i32 i32 i32) (result i32)))\n  (memory (export "memory") 1)\n  (data (i32.const 0) "../../etc/passwd")\n  (func (export "run") (result i64)\n    (i64.extend_i32_s (call $r (i32.const 0) (i32.const 15) (i32.const 64) (i32.const 32)))\n  )\n)`,
+        fuel: 500000,
+        fuelUsed: 28,
+        fuelPct: 0.1,
+        memUsed: "64 KiB",
+        memPct: 0.4,
+        latency: "210 µs (0.21 ms)",
+        unprotected: "Host File Leaked",
+        kurungStatus: "ACCESS_DENIED",
+        kurungPill: "VFS Blocked (-2)",
+        receipt: {
+          module_sha256: "a184c8e7623d9b04f71a0673d32ef3c8d197368297ea4f9012354789bde0914c",
+          vfs_security: "PATH_TRAVERSAL_BLOCKED",
+          target_path: "../../etc/passwd",
+          status: "DENIED"
+        }
+      },
+      D: {
+        name: "D: Valid Agent Tool (Math)",
+        wat: `(module\n  (func (export "run") (result i64)\n    (local $i i64) (local $acc i64)\n    (loop $l\n      (local.set $acc (i64.add (local.get $acc) (local.get $i)))\n      (local.set $i (i64.add (local.get $i) (i64.const 1)))\n      (br_if $l (i64.lt_u (local.get $i) (i64.const 100)))\n    )\n    (local.get $acc)\n  )\n)`,
+        fuel: 500000,
+        fuelUsed: 304,
+        fuelPct: 0.2,
+        memUsed: "64 KiB",
+        memPct: 0.4,
+        latency: "35 µs (0.035 ms)",
+        unprotected: "Returns 4950",
+        kurungStatus: "OK (4950)",
+        kurungPill: "Executed in 35 µs",
+        receipt: {
+          module_sha256: "bf412c7a742f99d973782f895281825d7f8324ba8334a5b34dceadab74e6924e",
+          return_value: 4950,
+          fuel_consumed: 304,
+          cache_hit: true,
+          status: "OK"
+        }
+      }
+    };
+
+    let current = 'A';
+
+    function selectScenario(key) {
+      current = key;
+      ['A', 'B', 'C', 'D'].forEach(k => {
+        document.getElementById('btn' + k).classList.toggle('active', k === key);
+      });
+      const sc = scenarios[key];
+      document.getElementById('activeScenarioLabel').innerText = sc.name;
+      document.getElementById('codeDisplay').innerText = sc.wat;
+      document.getElementById('impactVector').innerText = sc.name.split(':')[1].trim();
+
+      // Reset meters
+      document.getElementById('fuelBar').style.width = '0%';
+      document.getElementById('fuelBar').classList.remove('fill-danger');
+      document.getElementById('fuelText').innerText = `0 / 500,000`;
+      document.getElementById('memBar').style.width = '0%';
+      document.getElementById('memBar').classList.remove('fill-danger');
+      document.getElementById('memText').innerText = `0 KiB / 16,384 KiB`;
+      document.getElementById('runtimeLatency').innerText = 'Ready';
+      document.getElementById('unprotectedResult').innerText = 'Awaiting Run';
+      document.getElementById('kurungResult').innerText = 'Awaiting Run';
+      document.getElementById('receiptDisplay').innerText = '// Click "Run Confinement Simulation" to execute...';
+    }
+
+    function executeSimulation() {
+      const sc = scenarios[current];
+      document.getElementById('runtimeLatency').innerText = `Executed: ${sc.latency}`;
+
+      const fuelBar = document.getElementById('fuelBar');
+      fuelBar.style.width = `${sc.fuelPct}%`;
+      if (sc.fuelPct > 80) fuelBar.classList.add('fill-danger');
+      else fuelBar.classList.remove('fill-danger');
+      document.getElementById('fuelText').innerText = `${sc.fuelUsed.toLocaleString()} / 500,000`;
+
+      const memBar = document.getElementById('memBar');
+      memBar.style.width = `${sc.memPct}%`;
+      document.getElementById('memText').innerText = `${sc.memUsed}`;
+
+      document.getElementById('unprotectedResult').innerText = sc.unprotected;
+      document.getElementById('kurungResult').innerText = sc.kurungPill;
+
+      document.getElementById('receiptDisplay').innerText = JSON.stringify(sc.receipt, null, 2);
+    }
+
+    // Initialize
+    selectScenario('A');
+  </script>
+</body>
+</html>
