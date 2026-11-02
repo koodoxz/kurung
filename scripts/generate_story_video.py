@@ -8,7 +8,7 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 FRAMES_DIR = OUTPUT_DIR / "story_frames"
 FRAMES_DIR.mkdir(parents=True, exist_ok=True)
 
-WIDTH, HEIGHT = 1000, 620
+WIDTH, HEIGHT = 1140, 640
 BG_COLOR = (11, 15, 25)
 PANEL_BG = (17, 24, 39)
 BORDER_COLOR = (31, 41, 55)
@@ -22,9 +22,9 @@ COLOR_YELLOW = (251, 191, 36)
 try:
     FONT_BIG = ImageFont.truetype("consola.ttf", 22)
     FONT_TITLE = ImageFont.truetype("consolab.ttf", 18)
-    FONT_TEXT = ImageFont.truetype("consola.ttf", 15)
-    FONT_BOLD = ImageFont.truetype("consolab.ttf", 15)
-    FONT_SMALL = ImageFont.truetype("consola.ttf", 13)
+    FONT_TEXT = ImageFont.truetype("consola.ttf", 14)
+    FONT_BOLD = ImageFont.truetype("consolab.ttf", 14)
+    FONT_SMALL = ImageFont.truetype("consola.ttf", 12)
 except Exception:
     FONT_BIG = ImageFont.load_default()
     FONT_TITLE = ImageFont.load_default()
@@ -49,35 +49,34 @@ def draw_canvas(draw, act_badge, act_title):
     draw.text((105, 37), "KURUNG DEFENSE ENGINE — MECOB ARCHITECTURE", fill=COLOR_BLUE, font=FONT_TITLE)
 
     # Act Badge Bar
-    draw.rectangle([40, 85, WIDTH - 40, 130], fill=(15, 23, 42), outline=BORDER_COLOR, width=1)
-    draw.rectangle([48, 93, 160, 122], fill=(2, 132, 199))
-    draw.text((58, 98), act_badge, fill=(255, 255, 255), font=FONT_BOLD)
-    draw.text((175, 98), act_title, fill=TEXT_WHITE, font=FONT_BOLD)
+    draw.rectangle([35, 85, WIDTH - 35, 130], fill=(15, 23, 42), outline=BORDER_COLOR, width=1)
+    draw.rectangle([45, 93, 165, 122], fill=(2, 132, 199))
+    draw.text((55, 98), act_badge, fill=(255, 255, 255), font=FONT_BOLD)
+    draw.text((180, 98), act_title, fill=TEXT_WHITE, font=FONT_BOLD)
 
 def create_storyboard():
-    # 6 clear story acts with 6 seconds (60 frames at 10 fps) per act so viewers can read comfortably
     acts = [
         {
             "badge": "OVERVIEW",
-            "title": "Why Autonomous AI Agents Need a Sandbox",
+            "title": "Why Autonomous AI Agents Need a Confinement Sandbox",
             "frames": 50,
             "box1_title": "THE PROBLEM (WITHOUT KURUNG)",
             "box1_color": COLOR_RED,
             "box1_lines": [
-                "When AI agents (Claude, Antigravity, OpenClaw) write and run code,",
-                "they execute unpredictable scripts directly on your computer:",
-                "- Buggy infinite loops freeze your CPU cores.",
-                "- Memory leaks crash your active trading bots.",
-                "- File escapes risk reading your passwords and private keys."
+                "When AI agents (Claude, Antigravity, OpenClaw) write code,",
+                "they execute raw, unconfined scripts directly on your host:",
+                "- Infinite loops freeze your CPU cores.",
+                "- Memory bombs exhaust RAM & crash trading bots.",
+                "- File escapes risk leaking passwords & API keys."
             ],
             "box2_title": "THE SOLUTION (KURUNG ENGINE)",
             "box2_color": COLOR_GREEN,
             "box2_lines": [
-                "Kurung puts untrusted AI code inside a bulletproof WebAssembly jail:",
-                "- 100% Pure Rust (#![forbid(unsafe_code)]).",
+                "Kurung puts untrusted AI code inside a deterministic jail:",
+                "- 100% Pure Rust with #![forbid(unsafe_code)].",
                 "- Sub-millisecond cold start: 787 microseconds (0.78 ms).",
                 "- Exact instruction fuel budgeting + RAM hard ceiling.",
-                "- Complete isolation from your Windows disks and files."
+                "- Ephemeral in-memory VFS (Zero Windows disk leaks)."
             ]
         },
         {
@@ -91,16 +90,16 @@ def create_storyboard():
                 "",
                 "[WITHOUT KURUNG]:",
                 "- 100% CPU core utilization immediately.",
-                "- Laptop fans scream, system freezes.",
-                "- Requires manual Windows Task Manager kill."
+                "- Laptop fans scream, system locks up.",
+                "- Requires manual Windows Task Manager force-kill."
             ],
             "box2_title": "KURUNG DETERMINISTIC INTERCEPTION",
             "box2_color": COLOR_GREEN,
             "box2_lines": [
-                "Instruction Meter: 10,000... 30,000... 50,000 [FUEL EXHAUSTED]",
+                "Configured Budget: 50,000 CPU instructions (fuel).",
                 "",
                 "[WITH KURUNG]:",
-                "[SECURE] OutOfFuel Trap triggered at EXACT instruction #50,000.",
+                "[TRAP] OutOfFuel triggered at instruction #50,000.",
                 "[RESULT] Stopped in 412 microseconds (0.0004 sec).",
                 "[STATUS] Host CPU: 0% impact | System perfectly safe."
             ]
@@ -112,22 +111,22 @@ def create_storyboard():
             "box1_title": "AI AGENT REQUESTS MASSIVE RAM",
             "box1_color": COLOR_RED,
             "box1_lines": [
-                "Agent attempts to allocate 10,000 WASM pages (655 MB RAM):",
+                "Agent attempts to allocate 10,000 WASM pages (655 MB):",
                 "(memory.grow 10000)",
                 "",
                 "[WITHOUT KURUNG]:",
-                "- System paging file explodes.",
-                "- Active trading bots and browser crash due to OS OOM."
+                "- Paging file explodes across host memory.",
+                "- Active trading bots crash due to OS Out-Of-Memory."
             ],
             "box2_title": "KURUNG LINEAR MEMORY CEILING",
             "box2_color": COLOR_GREEN,
             "box2_lines": [
-                "Configured Sandbox Policy: Max 16 MiB RAM Ceiling.",
+                "Configured Policy: Max 16 MiB linear memory ceiling.",
                 "",
                 "[WITH KURUNG]:",
-                "[SECURE] HostContext::memory_growing() intercepts request.",
+                "[TRAP] HostContext intercepts memory growth request.",
                 "[RESULT] Allocation denied -> returns -1 to guest code.",
-                "[STATUS] Host RAM used: 64 KiB only | Zero OS memory thrashing."
+                "[STATUS] Host RAM used: 64 KiB only | Zero OS thrashing."
             ]
         },
         {
@@ -137,21 +136,21 @@ def create_storyboard():
             "box1_title": "AI AGENT TRIES READING PRIVATE DISK",
             "box1_color": COLOR_RED,
             "box1_lines": [
-                "Agent tries to read Windows system or private credentials:",
+                "Agent tries reading host system or private files:",
                 "(vfs_read \"../../Windows/System32\" or \".env\")",
                 "",
                 "[WITHOUT KURUNG]:",
-                "- Private API keys, tokens, and broker secrets are exposed."
+                "- Private API keys, tokens & credentials exposed."
             ],
             "box2_title": "KURUNG ISOLATED IN-MEMORY VFS",
             "box2_color": COLOR_GREEN,
             "box2_lines": [
-                "Virtual Filesystem Policy: Default-Deny In-Memory BTreeMap.",
+                "Virtual Filesystem Policy: Default-Deny In-Memory VFS.",
                 "",
                 "[WITH KURUNG]:",
-                "[SECURE] Sanitizer detects forbidden path components ('..', '\\').",
-                "[RESULT] Access Denied (-2). Agent cannot see your C:\\ drive.",
-                "[STATUS] Zero Host Disk Leaks | Complete filesystem confinement."
+                "[TRAP] Sanitizer detects forbidden tokens ('..', '\\', ':').",
+                "[RESULT] Access Denied (-2). Agent cannot see drive C:\\.",
+                "[STATUS] Zero Host Disk Leaks | Total sandboxing."
             ]
         },
         {
@@ -164,19 +163,19 @@ def create_storyboard():
                 "Agent computes math tool: sum of cubes (1^3 + ... + 10^3)",
                 "Payload: \"ANTIGRAVITY_AGENT_OK\"",
                 "",
-                "Execution Return Value: 3025",
-                "Execution Duration    : 321 microseconds (0.32 ms)",
-                "Instruction Fuel Used : 64 instructions only"
+                "Return Value : 3025",
+                "Duration     : 321 microseconds (0.32 ms)",
+                "Fuel Used    : 64 instructions only"
             ],
             "box2_title": "CRYPTOGRAPHIC PROOF OF EXECUTION",
             "box2_color": COLOR_GREEN,
             "box2_lines": [
                 "Kurung issues an immutable SHA-256 tamper-evident receipt:",
                 "",
-                "Module Hash : c53fa1151bb41d12b0827bb39f79afae61070...",
-                "Output Hash : f2c7e2fd4898808a252937e93ca088a78110...",
-                "Status      : OK | Proof of Safe Deterministic Compute",
-                "[MECOB] Audit trail logged to disk with zero doubt."
+                "Module Hash : c53fa1151bb41d12b0827bb39f79afae...",
+                "Output Hash : f2c7e2fd4898808a252937e93ca088a7...",
+                "Status      : OK | Verified Deterministic Compute",
+                "[MECOB] Cryptographic receipt logged for audit trail."
             ]
         },
         {
@@ -186,16 +185,16 @@ def create_storyboard():
             "box1_title": "SPEED COMPARISON",
             "box1_color": COLOR_BLUE,
             "box1_lines": [
-                "- Docker Container Cold Start : 300 ms - 1,500 ms (Too slow for AI)",
+                "- Docker Container Cold Start : 300 ms - 1,500 ms (Too slow)",
                 "- MicroVM (Firecracker/gVisor): 150 ms - 500 ms (Heavy setup)",
                 "- KURUNG ENGINE COLD START    : 0.78 ms (787 us) [FASTEST]",
-                "- KURUNG WARM CACHED RUN      : 0.035 ms (35 us) (28,500 ops/sec)"
+                "- KURUNG WARM CACHED RUN      : 0.035 ms (35 us) (28,500 ops/s)"
             ],
             "box2_title": "READY FOR YOUR AGENT STACK",
             "box2_color": COLOR_GREEN,
             "box2_lines": [
-                "- Works with Claude Code, Antigravity CLI, Cursor, and OpenClaw.",
-                "- Connects via standard Model Context Protocol (MCP) in 1 line.",
+                "- Integrates with Claude Code, Antigravity, Cursor, OpenClaw.",
+                "- Native Model Context Protocol (MCP) server: 'kurung mcp'.",
                 "- Open-Source dual licensed (MIT OR Apache-2.0).",
                 "- GitHub: https://github.com/koodoxz/kurung"
             ]
@@ -209,34 +208,34 @@ def create_storyboard():
             draw = ImageDraw.Draw(img)
             draw_canvas(draw, act["badge"], act["title"])
 
-            # Left Box (The Threat / Problem)
-            draw.rectangle([40, 150, 480, HEIGHT - 40], fill=(15, 23, 42), outline=BORDER_COLOR, width=1)
-            draw.rectangle([40, 150, 480, 190], fill=(24, 31, 47), outline=BORDER_COLOR, width=1)
-            draw.text((55, 162), act["box1_title"], fill=act["box1_color"], font=FONT_BOLD)
+            # Left Box (width = 525px)
+            draw.rectangle([35, 145, 555, HEIGHT - 35], fill=(15, 23, 42), outline=BORDER_COLOR, width=1)
+            draw.rectangle([35, 145, 555, 185], fill=(24, 31, 47), outline=BORDER_COLOR, width=1)
+            draw.text((50, 157), act["box1_title"], fill=act["box1_color"], font=FONT_BOLD)
 
-            y1 = 210
+            y1 = 205
             for line in act["box1_lines"]:
                 col = TEXT_WHITE if not line.startswith("-") else TEXT_MUTED
                 if "[WITHOUT" in line:
                     col = COLOR_RED
-                draw.text((55, y1), line, fill=col, font=FONT_TEXT)
+                draw.text((50, y1), line, fill=col, font=FONT_TEXT)
                 y1 += 26
 
-            # Right Box (The Kurung Defense)
-            draw.rectangle([520, 150, WIDTH - 40, HEIGHT - 40], fill=(15, 23, 42), outline=BORDER_COLOR, width=1)
-            draw.rectangle([520, 150, WIDTH - 40, 190], fill=(24, 31, 47), outline=BORDER_COLOR, width=1)
-            draw.text((535, 162), act["box2_title"], fill=act["box2_color"], font=FONT_BOLD)
+            # Right Box (width = 535px)
+            draw.rectangle([580, 145, WIDTH - 35, HEIGHT - 35], fill=(15, 23, 42), outline=BORDER_COLOR, width=1)
+            draw.rectangle([580, 145, WIDTH - 35, 185], fill=(24, 31, 47), outline=BORDER_COLOR, width=1)
+            draw.text((595, 157), act["box2_title"], fill=act["box2_color"], font=FONT_BOLD)
 
-            y2 = 210
+            y2 = 205
             for line in act["box2_lines"]:
                 col = TEXT_WHITE
-                if "[SECURE]" in line or "[RESULT]" in line or "[STATUS]" in line or "[WITH" in line:
+                if "[TRAP]" in line or "[RESULT]" in line or "[STATUS]" in line or "[WITH" in line:
                     col = COLOR_GREEN
-                elif "[FUEL" in line:
-                    col = COLOR_YELLOW
+                elif "[MECOB]" in line or "Configured" in line:
+                    col = COLOR_BLUE
                 elif line.startswith("-"):
                     col = TEXT_MUTED
-                draw.text((535, y2), line, fill=col, font=FONT_TEXT)
+                draw.text((595, y2), line, fill=col, font=FONT_TEXT)
                 y2 += 26
 
             frame_path = FRAMES_DIR / f"frame_{frame_idx:04d}.png"
@@ -253,7 +252,7 @@ def render_story_video():
     mp4_out = OUTPUT_DIR / "kurung_simulation.mp4"
     gif_out = OUTPUT_DIR / "kurung_simulation.gif"
     
-    # 10 fps -> 340 frames = 34 seconds of crystal-clear explanatory walkthrough
+    # 10 fps -> 340 frames = 34 seconds
     cmd_mp4 = [
         str(ffmpeg_bin), "-y",
         "-framerate", "10",
@@ -270,7 +269,7 @@ def render_story_video():
         str(ffmpeg_bin), "-y",
         "-framerate", "10",
         "-i", str(FRAMES_DIR / "frame_%04d.png"),
-        "-vf", "scale=800:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse",
+        "-vf", "scale=900:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse",
         str(gif_out)
     ]
     subprocess.run(cmd_gif, check=True)
