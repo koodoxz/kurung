@@ -5,7 +5,8 @@
 # kurung
 
 [![CI](https://github.com/koodoxz/kurung/actions/workflows/ci.yml/badge.svg)](https://github.com/koodoxz/kurung/actions/workflows/ci.yml)
-[![Rust](https://img.shields.io/badge/Rust-1.80%2B-blue.svg?logo=rust)](https://www.rust-lang.org)
+[![Pure Rust](https://img.shields.io/badge/100%25-Pure%20Rust-DEA584.svg?logo=rust)](https://www.rust-lang.org)
+[![Rust Version](https://img.shields.io/badge/Rust-1.80%2B-blue.svg)](https://www.rust-lang.org)
 [![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-555555.svg)](https://github.com/koodoxz/kurung)
 [![MCP](https://img.shields.io/badge/MCP-Protocol%202024--11--05-blueviolet.svg)](https://modelcontextprotocol.io)
 [![License](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
