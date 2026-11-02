@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/kurung_banner.png" alt="Kurung Secure WASM Sandbox" width="100%">
+</p>
+
 # kurung
 
 [![CI](https://github.com/koodoxz/kurung/actions/workflows/ci.yml/badge.svg)](https://github.com/koodoxz/kurung/actions/workflows/ci.yml)
@@ -40,23 +44,23 @@ It is critical to distinguish between **Semantic Policy Authorization** (busines
 
 ```mermaid
 graph TD
-    Agent["🤖 AI AGENT<br/>(Claude Code / OpenCode / Antigravity)"] --> Dispatcher["🔀 Tool Dispatcher"]
-    Dispatcher --> Policy["🛡️ Semantic Policy Authorization<br/>(Business Intent, Human Approval, Risk Limits)"]
-    Policy --> Branch{"Tool Classification"}
+    Agent["Host Agent Runtime<br/>(Claude Code / OpenCode / Antigravity / Custom)"] --> Dispatcher["Tool Dispatch Router"]
+    Dispatcher --> Policy["Semantic Policy Gate<br/>(Human Approval, Intent Whitelist, Risk Bounds)"]
+    Policy --> Router{"Execution Target"}
     
-    Branch -->|"Dynamic Compute / Untrusted WASM"| Kurung["📦 Kurung Execution Engine<br/>(Deterministic Confinement)"]
-    Branch -->|"External System Action / Network API"| MCP["🌐 MCP Tool Connector<br/>(Broker API / SQLite / OAuth)"]
+    Router -->|"Dynamic Untrusted Code / WASM"| Kurung["kurung::KurungEngine<br/>(In-Process Deterministic Isolation)"]
+    Router -->|"External System Call / Native I/O"| MCP["External MCP Tool Connector<br/>(Broker REST, Database, Host Shell)"]
     
-    subgraph KurungBoundary ["Kurung Isolation Boundary (Runtime Sandbox)"]
-        Kurung --> Fuel["⚡ Instruction Fuel Metering<br/>(Anti-Looping)"]
-        Kurung --> Mem["💾 Linear Memory Ceiling<br/>(Anti-RAM Bomb)"]
-        Kurung --> VFS["📁 In-Memory RAM VFS<br/>(Zero Host Disk Leak)"]
+    subgraph SandboxBoundary ["Kurung Confinement Domain (Runtime Sandbox)"]
+        Kurung --> Fuel["Instruction-Level Fuel Meter<br/>(Deterministic CPU Budget)"]
+        Kurung --> Mem["Linear Memory Limiter<br/>(Page-Aligned Growth Ceiling)"]
+        Kurung --> VFS["Ephemeral RAM VFS<br/>(Default-Deny File Isolation)"]
     end
     
-    KurungBoundary --> Receipt["📜 Cryptographic Execution Receipt<br/>(SHA-256 Triplet + Attestation Sink)"]
-    Receipt --> Validation["🔍 Result Validation"]
-    MCP --> Validation
-    Validation --> Continuation["🔄 Agent Continuation<br/>(Next Reasoning Step)"]
+    SandboxBoundary --> Receipt["ExecutionReceipt<br/>(SHA-256 Digest Triplet + Resource Attestation)"]
+    Receipt --> Sink["Attestation Sink / Validation Engine"]
+    MCP --> Sink
+    Sink --> Continuation["Agent Context Update & Continuation"]
 ```
 
 ---
@@ -65,10 +69,12 @@ graph TD
 
 ![Kurung Security Simulation](docs/assets/kurung_simulation.gif)
 
+### Low-Level Execution Sequence & Trap Resolution
+
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Agent as AI Agent / MCP Host
+    participant Agent as Host Agent / MCP Host
     participant Kurung as kurung::KurungEngine
     participant Limiter as ResourceLimiter & Fuel
     participant VFS as In-Memory VFS
@@ -92,6 +98,7 @@ sequenceDiagram
     Note over VFS: Path traversal (.., C:\) rejected at policy layer
     Kurung->>Output: Produce ExecutionReceipt (SHA-256 triplet + Fuel count)
     Output-->>Agent: Return value, stdout, and tamper-evident receipt
+```
 ```
 
 ---
