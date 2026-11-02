@@ -327,25 +327,43 @@ fn run_mcp_server() -> Result<(), Box<dyn std::error::Error>> {
             "tools/call" => {
                 let params = req.get("params").cloned().unwrap_or_else(|| json!({}));
                 let tool_name = params.get("name").and_then(|n| n.as_str()).unwrap_or("");
-                let args = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
+                let args = params
+                    .get("arguments")
+                    .cloned()
+                    .unwrap_or_else(|| json!({}));
 
                 if tool_name == "kurung_audit_self" {
                     let mut audit_log = Vec::new();
-                    audit_log.push("Running Kurung 4-Stage Red-Team Adversarial Self-Audit...".to_string());
+                    audit_log.push(
+                        "Running Kurung 4-Stage Red-Team Adversarial Self-Audit...".to_string(),
+                    );
 
                     let mut p1 = SandboxPolicy::strict_default();
                     p1.max_fuel = 5_000;
                     let e1 = KurungEngine::new(p1)?;
                     let inf_wat = r#"(module (func (export "run") (result i64) (loop $l br $l) i64.const 0))"#;
-                    let pass1 = matches!(e1.execute_wat(inf_wat, "run", b""), Err(KurungError::FuelExhausted { .. }));
-                    audit_log.push(format!("  [{}] Stage 1: Infinite Loop Deterministic Fuel Cutoff", if pass1 { "PASS" } else { "FAIL" }));
+                    let pass1 = matches!(
+                        e1.execute_wat(inf_wat, "run", b""),
+                        Err(KurungError::FuelExhausted { .. })
+                    );
+                    audit_log.push(format!(
+                        "  [{}] Stage 1: Infinite Loop Deterministic Fuel Cutoff",
+                        if pass1 { "PASS" } else { "FAIL" }
+                    ));
 
                     let mut p2 = SandboxPolicy::strict_default();
                     p2.max_memory_bytes = 65_536;
                     let e2 = KurungEngine::new(p2)?;
-                    let mem_wat = r#"(module (memory 4) (func (export "run") (result i64) i64.const 1))"#;
-                    let pass2 = matches!(e2.execute_wat(mem_wat, "run", b""), Err(KurungError::MemoryLimitExceeded { .. }));
-                    audit_log.push(format!("  [{}] Stage 2: Linear Memory Bomb Rejection", if pass2 { "PASS" } else { "FAIL" }));
+                    let mem_wat =
+                        r#"(module (memory 4) (func (export "run") (result i64) i64.const 1))"#;
+                    let pass2 = matches!(
+                        e2.execute_wat(mem_wat, "run", b""),
+                        Err(KurungError::MemoryLimitExceeded { .. })
+                    );
+                    audit_log.push(format!(
+                        "  [{}] Stage 2: Linear Memory Bomb Rejection",
+                        if pass2 { "PASS" } else { "FAIL" }
+                    ));
 
                     let mut p3 = SandboxPolicy::strict_default();
                     p3.max_output_bytes = 4;
@@ -353,11 +371,19 @@ fn run_mcp_server() -> Result<(), Box<dyn std::error::Error>> {
                     let log_wat = r#"(module (import "kurung" "write_output" (func $w (param i32 i32) (result i32))) (memory (export "memory") 1) (data (i32.const 0) "FLOOD_DATA_12345") (func (export "run") (result i64) (i64.extend_i32_s (call $w (i32.const 0) (i32.const 16)))))"#;
                     let out3 = e3.execute_wat(log_wat, "run", b"")?;
                     let pass3 = out3.stdout == b"FLOO" && out3.receipt.output_truncated;
-                    audit_log.push(format!("  [{}] Stage 3: Stdout Flood Bounded Truncation", if pass3 { "PASS" } else { "FAIL" }));
+                    audit_log.push(format!(
+                        "  [{}] Stage 3: Stdout Flood Bounded Truncation",
+                        if pass3 { "PASS" } else { "FAIL" }
+                    ));
 
                     let p4 = SandboxPolicy::strict_default();
-                    let pass4 = p4.sanitize_virtual_path("../../Windows/System32", false).is_err();
-                    audit_log.push(format!("  [{}] Stage 4: VFS Default-Deny & Path Traversal Guard", if pass4 { "PASS" } else { "FAIL" }));
+                    let pass4 = p4
+                        .sanitize_virtual_path("../../Windows/System32", false)
+                        .is_err();
+                    audit_log.push(format!(
+                        "  [{}] Stage 4: VFS Default-Deny & Path Traversal Guard",
+                        if pass4 { "PASS" } else { "FAIL" }
+                    ));
 
                     audit_log.push("ALL 4 ADVERSARIAL SECURITY GATES PASSED.".to_string());
 
@@ -374,8 +400,14 @@ fn run_mcp_server() -> Result<(), Box<dyn std::error::Error>> {
                     let file_path = args.get("file_path").and_then(|f| f.as_str()).unwrap_or("");
                     let entry = args.get("entry").and_then(|e| e.as_str()).unwrap_or("run");
                     let input = args.get("input").and_then(|i| i.as_str()).unwrap_or("");
-                    let max_fuel = args.get("max_fuel").and_then(|f| f.as_u64()).unwrap_or(500_000);
-                    let max_memory_mb = args.get("max_memory_mb").and_then(|m| m.as_u64()).unwrap_or(16) as usize;
+                    let max_fuel = args
+                        .get("max_fuel")
+                        .and_then(|f| f.as_u64())
+                        .unwrap_or(500_000);
+                    let max_memory_mb = args
+                        .get("max_memory_mb")
+                        .and_then(|m| m.as_u64())
+                        .unwrap_or(16) as usize;
 
                     let mut policy = SandboxPolicy::strict_default();
                     policy.max_fuel = max_fuel;
