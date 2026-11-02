@@ -174,3 +174,4 @@ def render_mp4_and_gif():
 
 if __name__ == "__main__":
     render_mp4_and_gif()
+
