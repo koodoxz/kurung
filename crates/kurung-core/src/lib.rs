@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 use wasmi::core::TrapCode;
-use wasmi::{Caller, Config, Engine, Error as WasmiError, Linker, Module, ResourceLimiter, Store};
+use wasmi::{Caller, Config, Engine, Linker, Module, ResourceLimiter, Store};
 
 #[derive(Debug, Error)]
 pub enum KurungError {
@@ -21,9 +21,16 @@ pub enum KurungError {
     #[error("wasm compilation error: {0}")]
     Compilation(String),
     #[error("deterministic fuel exhausted: consumed {consumed} of {limit} allowed instructions")]
-    FuelExhausted { limit: u64, consumed: u64 },
+    FuelExhausted {
+        limit: u64,
+        consumed: u64,
+        receipt: Box<ExecutionReceipt>,
+    },
     #[error("linear memory ceiling exceeded: max allowed {max_bytes} bytes")]
-    MemoryLimitExceeded { max_bytes: usize },
+    MemoryLimitExceeded {
+        max_bytes: usize,
+        receipt: Box<ExecutionReceipt>,
+    },
     #[error("runtime trap during execution: {0}")]
     RuntimeTrap(String),
 }
@@ -204,16 +211,79 @@ impl KurungEngine {
         Self::register_host_functions(&mut linker)?;
 
         let instance = match linker.instantiate(&mut store, &module) {
-            Ok(pre) => pre
-                .start(&mut store)
-                .map_err(|e| self.classify_wasmi_error(e, &store))?,
+            Ok(pre) => match pre.start(&mut store) {
+                Ok(inst) => inst,
+                Err(err) => {
+                    let ctx = store.data();
+                    let is_mem = ctx.memory_limit_exceeded;
+                    let is_fuel = err.as_trap_code() == Some(TrapCode::OutOfFuel)
+                        || err.to_string().to_lowercase().contains("fuel");
+                    let status = if is_fuel {
+                        "FUEL_EXHAUSTED"
+                    } else if is_mem {
+                        "MEMORY_LIMIT_EXCEEDED"
+                    } else {
+                        "TRAP"
+                    };
+                    let duration_us = start_time.elapsed().as_micros() as u64;
+                    let remaining_fuel = store.get_fuel().unwrap_or(0);
+                    let fuel_consumed = self.policy.max_fuel.saturating_sub(remaining_fuel);
+                    let receipt = ExecutionReceipt {
+                        module_sha256,
+                        input_sha256,
+                        output_sha256: sha256_hex(&ctx.output.as_bytes()),
+                        fuel_limit: self.policy.max_fuel,
+                        fuel_consumed,
+                        peak_memory_bytes: ctx.peak_memory_bytes,
+                        output_truncated: ctx.output.is_truncated(),
+                        cache_hit,
+                        duration_us,
+                        status: status.to_string(),
+                    };
+                    if let Some(sink) = &self.sink {
+                        sink.record_receipt(&receipt);
+                    }
+                    if is_fuel {
+                        return Err(KurungError::FuelExhausted {
+                            limit: self.policy.max_fuel,
+                            consumed: fuel_consumed,
+                            receipt: Box::new(receipt),
+                        });
+                    } else if is_mem {
+                        return Err(KurungError::MemoryLimitExceeded {
+                            max_bytes: self.policy.max_memory_bytes,
+                            receipt: Box::new(receipt),
+                        });
+                    } else {
+                        return Err(KurungError::RuntimeTrap(err.to_string()));
+                    }
+                }
+            },
             Err(e) => {
-                if store.data().memory_limit_exceeded {
+                let ctx = store.data();
+                if ctx.memory_limit_exceeded {
+                    let duration_us = start_time.elapsed().as_micros() as u64;
+                    let receipt = ExecutionReceipt {
+                        module_sha256,
+                        input_sha256,
+                        output_sha256: sha256_hex(&ctx.output.as_bytes()),
+                        fuel_limit: self.policy.max_fuel,
+                        fuel_consumed: 0,
+                        peak_memory_bytes: ctx.peak_memory_bytes,
+                        output_truncated: ctx.output.is_truncated(),
+                        cache_hit,
+                        duration_us,
+                        status: "MEMORY_LIMIT_EXCEEDED".to_string(),
+                    };
+                    if let Some(sink) = &self.sink {
+                        sink.record_receipt(&receipt);
+                    }
                     return Err(KurungError::MemoryLimitExceeded {
                         max_bytes: self.policy.max_memory_bytes,
+                        receipt: Box::new(receipt),
                     });
                 }
-                return Err(self.classify_wasmi_error(e, &store));
+                return Err(KurungError::RuntimeTrap(e.to_string()));
             }
         };
 
@@ -269,15 +339,20 @@ impl KurungEngine {
                 })
             }
             Err(err) => {
-                let classified = self.classify_wasmi_error(err, &store);
-                let status_label = match &classified {
-                    KurungError::FuelExhausted { .. } => "FUEL_EXHAUSTED",
-                    KurungError::MemoryLimitExceeded { .. } => "MEMORY_LIMIT_EXCEEDED",
-                    _ => "TRAP",
-                };
-
                 let ctx = store.data();
                 let stdout = ctx.output.as_bytes().to_vec();
+                let is_mem_exceeded = ctx.memory_limit_exceeded;
+                let is_out_of_fuel = err.as_trap_code() == Some(TrapCode::OutOfFuel)
+                    || err.to_string().to_lowercase().contains("fuel");
+
+                let status_label = if is_out_of_fuel {
+                    "FUEL_EXHAUSTED"
+                } else if is_mem_exceeded {
+                    "MEMORY_LIMIT_EXCEEDED"
+                } else {
+                    "TRAP"
+                };
+
                 let receipt = ExecutionReceipt {
                     module_sha256,
                     input_sha256,
@@ -295,32 +370,22 @@ impl KurungEngine {
                     sink.record_receipt(&receipt);
                 }
 
-                Err(classified)
+                if is_out_of_fuel {
+                    Err(KurungError::FuelExhausted {
+                        limit: self.policy.max_fuel,
+                        consumed: fuel_consumed,
+                        receipt: Box::new(receipt),
+                    })
+                } else if is_mem_exceeded {
+                    Err(KurungError::MemoryLimitExceeded {
+                        max_bytes: self.policy.max_memory_bytes,
+                        receipt: Box::new(receipt),
+                    })
+                } else {
+                    Err(KurungError::RuntimeTrap(err.to_string()))
+                }
             }
         }
-    }
-
-    fn classify_wasmi_error(&self, err: WasmiError, store: &Store<HostContext>) -> KurungError {
-        if let Some(TrapCode::OutOfFuel) = err.as_trap_code() {
-            let remaining = store.get_fuel().unwrap_or(0);
-            return KurungError::FuelExhausted {
-                limit: self.policy.max_fuel,
-                consumed: self.policy.max_fuel.saturating_sub(remaining),
-            };
-        }
-        if store.data().memory_limit_exceeded {
-            return KurungError::MemoryLimitExceeded {
-                max_bytes: self.policy.max_memory_bytes,
-            };
-        }
-        let msg = err.to_string();
-        if msg.to_lowercase().contains("fuel") {
-            return KurungError::FuelExhausted {
-                limit: self.policy.max_fuel,
-                consumed: self.policy.max_fuel,
-            };
-        }
-        KurungError::RuntimeTrap(msg)
     }
 
     fn register_host_functions(linker: &mut Linker<HostContext>) -> Result<(), KurungError> {

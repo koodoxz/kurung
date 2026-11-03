@@ -74,33 +74,68 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let engine = KurungEngine::new(policy)?;
             let raw_bytes = fs::read(&file)?;
 
-            let outcome = if file.extension().is_some_and(|ext| ext == "wat") {
+            let run_res = if file.extension().is_some_and(|ext| ext == "wat") {
                 let wat_str = std::str::from_utf8(&raw_bytes)?;
-                engine.execute_wat(wat_str, &entry, input.as_bytes())?
+                engine.execute_wat(wat_str, &entry, input.as_bytes())
             } else {
-                engine.execute_wasm(&raw_bytes, &entry, input.as_bytes())?
+                engine.execute_wasm(&raw_bytes, &entry, input.as_bytes())
             };
 
-            if json {
-                println!("{}", serde_json::to_string_pretty(&outcome)?);
-            } else {
-                println!("=== KURUNG EXECUTION RECEIPT ===");
-                println!("Return Value     : {}", outcome.return_value);
-                println!(
-                    "Stdout           : {}",
-                    String::from_utf8_lossy(&outcome.stdout)
-                );
-                println!("Module SHA-256   : {}", outcome.receipt.module_sha256);
-                println!(
-                    "Fuel Consumed    : {} / {}",
-                    outcome.receipt.fuel_consumed, outcome.receipt.fuel_limit
-                );
-                println!(
-                    "Peak Memory      : {} bytes",
-                    outcome.receipt.peak_memory_bytes
-                );
-                println!("Duration         : {} us", outcome.receipt.duration_us);
-                println!("Status           : {}", outcome.receipt.status);
+            match run_res {
+                Ok(outcome) => {
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&outcome)?);
+                    } else {
+                        println!("=== KURUNG EXECUTION RECEIPT ===");
+                        println!("Return Value     : {}", outcome.return_value);
+                        println!(
+                            "Stdout           : {}",
+                            String::from_utf8_lossy(&outcome.stdout)
+                        );
+                        println!("Module SHA-256   : {}", outcome.receipt.module_sha256);
+                        println!(
+                            "Fuel Consumed    : {} / {}",
+                            outcome.receipt.fuel_consumed, outcome.receipt.fuel_limit
+                        );
+                        println!(
+                            "Peak Memory      : {} bytes",
+                            outcome.receipt.peak_memory_bytes
+                        );
+                        println!("Duration         : {} us", outcome.receipt.duration_us);
+                        println!("Status           : {}", outcome.receipt.status);
+                    }
+                }
+                Err(err) => {
+                    let receipt_opt = match &err {
+                        KurungError::FuelExhausted { receipt, .. } => Some(receipt),
+                        KurungError::MemoryLimitExceeded { receipt, .. } => Some(receipt),
+                        _ => None,
+                    };
+
+                    if let Some(receipt) = receipt_opt {
+                        if json {
+                            let val = json!({
+                                "error": err.to_string(),
+                                "receipt": receipt
+                            });
+                            println!("{}", serde_json::to_string_pretty(&val)?);
+                        } else {
+                            eprintln!("=== KURUNG EXECUTION TRAPPED ===");
+                            eprintln!("Error            : {}", err);
+                            eprintln!("Module SHA-256   : {}", receipt.module_sha256);
+                            eprintln!(
+                                "Fuel Consumed    : {} / {}",
+                                receipt.fuel_consumed, receipt.fuel_limit
+                            );
+                            eprintln!("Peak Memory      : {} bytes", receipt.peak_memory_bytes);
+                            eprintln!("Duration         : {} us", receipt.duration_us);
+                            eprintln!("Status           : {}", receipt.status);
+                        }
+                        std::process::exit(1);
+                    } else {
+                        return Err(err.into());
+                    }
+                }
             }
         }
         Commands::Bench { iterations } => {
@@ -413,29 +448,59 @@ fn run_mcp_server() -> Result<(), Box<dyn std::error::Error>> {
                     policy.max_fuel = max_fuel;
                     policy.max_memory_bytes = max_memory_mb * 1024 * 1024;
 
-                    match (|| -> Result<Value, Box<dyn std::error::Error>> {
+                    match (|| -> Result<(Value, bool), Box<dyn std::error::Error>> {
                         let engine = KurungEngine::new(policy)?;
                         let raw_bytes = fs::read(file_path)?;
-                        let outcome = if file_path.ends_with(".wat") {
+                        let run_res = if file_path.ends_with(".wat") {
                             let wat_str = std::str::from_utf8(&raw_bytes)?;
-                            engine.execute_wat(wat_str, entry, input.as_bytes())?
+                            engine.execute_wat(wat_str, entry, input.as_bytes())
                         } else {
-                            engine.execute_wasm(&raw_bytes, entry, input.as_bytes())?
+                            engine.execute_wasm(&raw_bytes, entry, input.as_bytes())
                         };
-                        Ok(json!({
-                            "return_value": outcome.return_value,
-                            "stdout": String::from_utf8_lossy(&outcome.stdout),
-                            "receipt": outcome.receipt
-                        }))
+
+                        match run_res {
+                            Ok(outcome) => Ok((
+                                json!({
+                                    "return_value": outcome.return_value,
+                                    "stdout": String::from_utf8_lossy(&outcome.stdout),
+                                    "receipt": outcome.receipt
+                                }),
+                                false,
+                            )),
+                            Err(err) => {
+                                let receipt_opt = match &err {
+                                    KurungError::FuelExhausted { receipt, .. } => Some(receipt),
+                                    KurungError::MemoryLimitExceeded { receipt, .. } => {
+                                        Some(receipt)
+                                    }
+                                    _ => None,
+                                };
+                                if let Some(receipt) = receipt_opt {
+                                    Ok((
+                                        json!({
+                                            "status": receipt.status,
+                                            "error": err.to_string(),
+                                            "receipt": receipt
+                                        }),
+                                        true,
+                                    ))
+                                } else {
+                                    Err(err.into())
+                                }
+                            }
+                        }
                     })() {
-                        Ok(result_val) => {
-                            let resp = json!({
+                        Ok((result_val, is_err)) => {
+                            let mut resp = json!({
                                 "jsonrpc": "2.0",
                                 "id": id,
                                 "result": {
                                     "content": [{ "type": "text", "text": serde_json::to_string_pretty(&result_val)? }]
                                 }
                             });
+                            if is_err {
+                                resp["result"]["isError"] = json!(true);
+                            }
                             writeln!(out, "{}", serde_json::to_string(&resp)?)?;
                             out.flush()?;
                         }
