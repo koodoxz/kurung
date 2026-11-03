@@ -231,7 +231,7 @@ impl KurungEngine {
                     let receipt = ExecutionReceipt {
                         module_sha256,
                         input_sha256,
-                        output_sha256: sha256_hex(&ctx.output.as_bytes()),
+                        output_sha256: sha256_hex(ctx.output.as_bytes()),
                         fuel_limit: self.policy.max_fuel,
                         fuel_consumed,
                         peak_memory_bytes: ctx.peak_memory_bytes,
@@ -266,7 +266,7 @@ impl KurungEngine {
                     let receipt = ExecutionReceipt {
                         module_sha256,
                         input_sha256,
-                        output_sha256: sha256_hex(&ctx.output.as_bytes()),
+                        output_sha256: sha256_hex(ctx.output.as_bytes()),
                         fuel_limit: self.policy.max_fuel,
                         fuel_consumed: 0,
                         peak_memory_bytes: ctx.peak_memory_bytes,
