@@ -55,9 +55,11 @@ graph LR
 
 ---
 
-## Architectural Simulation
+## Architectural Simulation (Before vs After)
 
 ![Kurung Security Simulation](docs/assets/kurung_simulation.gif)
+
+> 📹 *High-definition video available at [`docs/assets/kurung_simulation.mp4`](docs/assets/kurung_simulation.mp4).*
 
 ---
 
