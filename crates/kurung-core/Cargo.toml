@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
-description = "Core deterministic WASM/WASI execution engine, fuel limiter, and SHA-256 receipt generator"
+description = "Core deterministic WebAssembly execution engine, fuel limiter, and SHA-256 receipt generator"
 
 [dependencies]
 kurung-policy.workspace = true

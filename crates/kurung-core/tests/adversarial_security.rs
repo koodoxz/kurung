@@ -179,3 +179,67 @@ fn req_krg_04_05_06_07_io_bridge_caching_receipt_and_sink() {
     let recorded = sink.receipts.lock().unwrap();
     assert_eq!(recorded.len(), 2);
 }
+
+#[test]
+fn req_audit_01_host_memory_amplification_is_strictly_clamped() {
+    let policy = SandboxPolicy::strict_default();
+    let engine = KurungEngine::new(policy).expect("valid policy");
+
+    // Guest has only 1 page (64 KB). It attempts to request 100 MB buffer allocation.
+    let amplification_wat = r#"
+        (module
+            (import "kurung" "write_output" (func $write_output (param i32 i32) (result i32)))
+            (import "kurung" "vfs_write" (func $vfs_write (param i32 i32 i32 i32) (result i32)))
+            (memory (export "memory") 1)
+            (data (i32.const 0) "/workspace/test.txt")
+            (func (export "run") (result i64)
+                ;; 1. write_output with 100 MB len -> must be rejected with -1 before host allocation
+                (if (i32.ne (call $write_output (i32.const 0) (i32.const 100000000)) (i32.const -1))
+                    (then (return (i64.const -1)))
+                )
+                ;; 2. vfs_write with 100 MB path_len -> must be rejected with -1
+                (if (i32.ne (call $vfs_write (i32.const 0) (i32.const 100000000) (i32.const 0) (i32.const 10)) (i32.const -1))
+                    (then (return (i64.const -2)))
+                )
+                ;; 3. vfs_write with 100 MB src_len -> must be rejected with -1
+                (if (i32.ne (call $vfs_write (i32.const 0) (i32.const 19) (i32.const 0) (i32.const 100000000)) (i32.const -1))
+                    (then (return (i64.const -3)))
+                )
+                i64.const 42
+            )
+        )
+    "#;
+
+    let outcome = engine
+        .execute_wat(amplification_wat, "run", b"")
+        .expect("execution must succeed with rejected oversized calls");
+    assert_eq!(outcome.return_value, 42);
+}
+
+#[test]
+fn req_audit_02_trap_code_exactness_not_spoofed_by_error_string() {
+    let mut policy = SandboxPolicy::strict_default();
+    policy.max_fuel = 1_000_000;
+    let engine = KurungEngine::new(policy).expect("valid policy");
+
+    // A function whose debug name contains "fuel" that traps with integer divide by zero
+    let div_zero_wat = r#"
+        (module
+            (func $trap_while_calculating_fuel (export "run") (result i64)
+                i32.const 1
+                i32.const 0
+                i32.div_s
+                i64.extend_i32_s
+            )
+        )
+    "#;
+
+    let err = engine
+        .execute_wat(div_zero_wat, "run", b"")
+        .expect_err("division by zero must trap");
+
+    assert!(
+        matches!(err, KurungError::RuntimeTrap(_)),
+        "Integer divide by zero must be RuntimeTrap, not FuelExhausted. Got: {err:?}"
+    );
+}

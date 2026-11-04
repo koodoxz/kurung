@@ -12,6 +12,11 @@ use thiserror::Error;
 use wasmi::core::TrapCode;
 use wasmi::{Caller, Config, Engine, Linker, Module, ResourceLimiter, Store};
 
+/// Maximum buffer size (in bytes) allocated on the host per I/O call from guest (64 KiB).
+pub const MAX_HOST_IO_CHUNK: usize = 64 * 1024;
+/// Maximum length (in bytes) for a virtual filesystem path (4 KiB).
+pub const MAX_VFS_PATH_LEN: usize = 4096;
+
 #[derive(Debug, Error)]
 pub enum KurungError {
     #[error("policy validation failed: {0}")]
@@ -216,8 +221,7 @@ impl KurungEngine {
                 Err(err) => {
                     let ctx = store.data();
                     let is_mem = ctx.memory_limit_exceeded;
-                    let is_fuel = err.as_trap_code() == Some(TrapCode::OutOfFuel)
-                        || err.to_string().to_lowercase().contains("fuel");
+                    let is_fuel = err.as_trap_code() == Some(TrapCode::OutOfFuel);
                     let status = if is_fuel {
                         "FUEL_EXHAUSTED"
                     } else if is_mem {
@@ -342,8 +346,7 @@ impl KurungEngine {
                 let ctx = store.data();
                 let stdout = ctx.output.as_bytes().to_vec();
                 let is_mem_exceeded = ctx.memory_limit_exceeded;
-                let is_out_of_fuel = err.as_trap_code() == Some(TrapCode::OutOfFuel)
-                    || err.to_string().to_lowercase().contains("fuel");
+                let is_out_of_fuel = err.as_trap_code() == Some(TrapCode::OutOfFuel);
 
                 let status_label = if is_out_of_fuel {
                     "FUEL_EXHAUSTED"
@@ -409,12 +412,16 @@ impl KurungEngine {
                     else {
                         return -1;
                     };
-                    let input_bytes = caller.data().input.clone();
-                    let to_copy = input_bytes.len().min(max_len as usize);
-                    if mem
-                        .write(&mut caller, dest_ptr as usize, &input_bytes[..to_copy])
-                        .is_err()
-                    {
+                    let mem_size = mem.data_size(&caller);
+                    let to_copy = {
+                        let input_ref = &caller.data().input;
+                        input_ref.len().min(max_len as usize).min(MAX_HOST_IO_CHUNK)
+                    };
+                    if (dest_ptr as usize).saturating_add(to_copy) > mem_size {
+                        return -1;
+                    }
+                    let chunk = caller.data().input[..to_copy].to_vec();
+                    if mem.write(&mut caller, dest_ptr as usize, &chunk).is_err() {
                         return -1;
                     }
                     to_copy as i32
@@ -427,13 +434,17 @@ impl KurungEngine {
                 "kurung",
                 "write_output",
                 |mut caller: Caller<'_, HostContext>, src_ptr: i32, len: i32| -> i32 {
-                    if src_ptr < 0 || len < 0 {
+                    if src_ptr < 0 || len < 0 || len as usize > MAX_HOST_IO_CHUNK {
                         return -1;
                     }
                     let Some(mem) = caller.get_export("memory").and_then(|e| e.into_memory())
                     else {
                         return -1;
                     };
+                    let mem_size = mem.data_size(&caller);
+                    if (src_ptr as usize).saturating_add(len as usize) > mem_size {
+                        return -1;
+                    }
                     let mut buf = vec![0u8; len as usize];
                     if mem.read(&caller, src_ptr as usize, &mut buf).is_err() {
                         return -1;
@@ -453,13 +464,25 @@ impl KurungEngine {
                  src_ptr: i32,
                  src_len: i32|
                  -> i32 {
-                    if path_ptr < 0 || path_len <= 0 || src_ptr < 0 || src_len < 0 {
+                    if path_ptr < 0
+                        || path_len <= 0
+                        || path_len as usize > MAX_VFS_PATH_LEN
+                        || src_ptr < 0
+                        || src_len < 0
+                        || src_len as usize > MAX_HOST_IO_CHUNK
+                    {
                         return -1;
                     }
                     let Some(mem) = caller.get_export("memory").and_then(|e| e.into_memory())
                     else {
                         return -1;
                     };
+                    let mem_size = mem.data_size(&caller);
+                    if (path_ptr as usize).saturating_add(path_len as usize) > mem_size
+                        || (src_ptr as usize).saturating_add(src_len as usize) > mem_size
+                    {
+                        return -1;
+                    }
                     let mut path_buf = vec![0u8; path_len as usize];
                     if mem.read(&caller, path_ptr as usize, &mut path_buf).is_err() {
                         return -1;
@@ -492,13 +515,22 @@ impl KurungEngine {
                  dest_ptr: i32,
                  dest_cap: i32|
                  -> i32 {
-                    if path_ptr < 0 || path_len <= 0 || dest_ptr < 0 || dest_cap < 0 {
+                    if path_ptr < 0
+                        || path_len <= 0
+                        || path_len as usize > MAX_VFS_PATH_LEN
+                        || dest_ptr < 0
+                        || dest_cap < 0
+                    {
                         return -1;
                     }
                     let Some(mem) = caller.get_export("memory").and_then(|e| e.into_memory())
                     else {
                         return -1;
                     };
+                    let mem_size = mem.data_size(&caller);
+                    if (path_ptr as usize).saturating_add(path_len as usize) > mem_size {
+                        return -1;
+                    }
                     let mut path_buf = vec![0u8; path_len as usize];
                     if mem.read(&caller, path_ptr as usize, &mut path_buf).is_err() {
                         return -1;
@@ -510,7 +542,10 @@ impl KurungEngine {
                         Ok(bytes) => bytes.to_vec(),
                         Err(_) => return -2,
                     };
-                    let to_copy = content.len().min(dest_cap as usize);
+                    let to_copy = content.len().min(dest_cap as usize).min(MAX_HOST_IO_CHUNK);
+                    if (dest_ptr as usize).saturating_add(to_copy) > mem_size {
+                        return -1;
+                    }
                     if mem
                         .write(&mut caller, dest_ptr as usize, &content[..to_copy])
                         .is_err()

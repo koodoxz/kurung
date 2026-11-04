@@ -13,7 +13,7 @@ edition = "2021"
 authors = ["E. Brillianto <@koodoxz>"]
 license = "Apache-2.0 OR MIT"
 repository = "https://github.com/koodoxz/kurung"
-description = "Sub-millisecond deterministic WASI/WASM confinement sandbox for autonomous AI agents"
+description = "Sub-millisecond deterministic WebAssembly confinement sandbox for autonomous AI agents"
 
 [workspace.dependencies]
 serde = { version = "1.0", features = ["derive"] }

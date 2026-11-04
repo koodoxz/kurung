@@ -14,7 +14,7 @@ use serde_json::{json, Value};
 #[command(
     name = "kurung",
     version,
-    about = "Sub-millisecond deterministic WASI/WASM confinement sandbox for AI agents"
+    about = "Sub-millisecond deterministic WebAssembly confinement sandbox for AI agents"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -449,6 +449,13 @@ fn run_mcp_server() -> Result<(), Box<dyn std::error::Error>> {
                     policy.max_memory_bytes = max_memory_mb * 1024 * 1024;
 
                     match (|| -> Result<(Value, bool), Box<dyn std::error::Error>> {
+                        if !file_path.ends_with(".wasm") && !file_path.ends_with(".wat") {
+                            return Err("security error: file_path must have a .wasm or .wat extension".into());
+                        }
+                        let path_obj = std::path::Path::new(file_path);
+                        if path_obj.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+                            return Err("security error: path traversal '..' is strictly forbidden in file_path".into());
+                        }
                         let engine = KurungEngine::new(policy)?;
                         let raw_bytes = fs::read(file_path)?;
                         let run_res = if file_path.ends_with(".wat") {
