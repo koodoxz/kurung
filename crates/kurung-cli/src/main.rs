@@ -450,10 +450,16 @@ fn run_mcp_server() -> Result<(), Box<dyn std::error::Error>> {
 
                     match (|| -> Result<(Value, bool), Box<dyn std::error::Error>> {
                         if !file_path.ends_with(".wasm") && !file_path.ends_with(".wat") {
-                            return Err("security error: file_path must have a .wasm or .wat extension".into());
+                            return Err(
+                                "security error: file_path must have a .wasm or .wat extension"
+                                    .into(),
+                            );
                         }
                         let path_obj = std::path::Path::new(file_path);
-                        if path_obj.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+                        if path_obj
+                            .components()
+                            .any(|c| matches!(c, std::path::Component::ParentDir))
+                        {
                             return Err("security error: path traversal '..' is strictly forbidden in file_path".into());
                         }
                         let engine = KurungEngine::new(policy)?;
