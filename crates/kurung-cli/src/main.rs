@@ -346,12 +346,24 @@ fn run_mcp_server() -> Result<(), Box<dyn std::error::Error>> {
                                         "max_memory_mb": { "type": "number", "description": "Maximum allowed linear memory in MiB", "default": 16 }
                                     },
                                     "required": ["file_path"]
+                                },
+                                "annotations": {
+                                    "readOnlyHint": false,
+                                    "destructiveHint": false,
+                                    "idempotentHint": true,
+                                    "openWorldHint": false
                                 }
                             },
                             {
                                 "name": "kurung_audit_self",
                                 "description": "Execute the built-in 4-stage adversarial verification suite.",
-                                "inputSchema": { "type": "object", "properties": {} }
+                                "inputSchema": { "type": "object", "properties": {} },
+                                "annotations": {
+                                    "readOnlyHint": true,
+                                    "destructiveHint": false,
+                                    "idempotentHint": true,
+                                    "openWorldHint": false
+                                }
                             }
                         ]
                     }
@@ -553,4 +565,44 @@ fn run_mcp_server() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tools_list_schema_and_annotations() {
+        let tools_json = json!([
+            {
+                "name": "kurung_run_wasm",
+                "annotations": {
+                    "readOnlyHint": false,
+                    "destructiveHint": false,
+                    "idempotentHint": true,
+                    "openWorldHint": false
+                }
+            },
+            {
+                "name": "kurung_audit_self",
+                "annotations": {
+                    "readOnlyHint": true,
+                    "destructiveHint": false,
+                    "idempotentHint": true,
+                    "openWorldHint": false
+                }
+            }
+        ]);
+        let tools = tools_json.as_array().unwrap();
+        assert_eq!(tools.len(), 2);
+        for tool in tools {
+            let name = tool.get("name").unwrap().as_str().unwrap();
+            let ann = tool.get("annotations").unwrap();
+            assert!(ann.get("readOnlyHint").unwrap().is_boolean());
+            assert!(ann.get("destructiveHint").unwrap().is_boolean());
+            assert!(ann.get("idempotentHint").unwrap().is_boolean());
+            assert!(ann.get("openWorldHint").unwrap().is_boolean());
+            assert!(name == "kurung_run_wasm" || name == "kurung_audit_self");
+        }
+    }
 }
